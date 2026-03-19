@@ -1,6 +1,6 @@
-import uuid
+import logging
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.core.config import settings
 from app.core.security import verify_api_key
@@ -8,6 +8,7 @@ from app.schemas.image_analysis import ImageAnalysisResult
 from app.services.image_chain import analyze_image_with_llm
 
 router = APIRouter()
+logger = logging.getLogger("uvicorn.error")
 
 
 @router.post(
@@ -16,6 +17,7 @@ router = APIRouter()
     dependencies=[Depends(verify_api_key)],
 )
 async def analyze_image(
+    request: Request,
     image: UploadFile = File(...),
     user_name: str = Form("用户"),
     scene_hint: str = Form("auto"),
@@ -37,7 +39,17 @@ async def analyze_image(
             detail=f"图片大小超过限制，当前最大允许 {settings.max_upload_mb}MB",
         )
 
-    request_id = f"img_{uuid.uuid4().hex[:12]}"
+    request_id = request.state.request_id
+
+    logger.info(
+        "image analyze request received | request_id=%s | filename=%s | content_type=%s | size_bytes=%s | user_name=%s | scene_hint=%s",
+        request_id,
+        image.filename,
+        image.content_type,
+        len(image_bytes),
+        user_name,
+        scene_hint,
+    )
 
     return analyze_image_with_llm(
         image_bytes=image_bytes,
