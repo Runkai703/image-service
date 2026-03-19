@@ -1,15 +1,20 @@
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.core.config import settings
+from app.core.security import verify_api_key
 from app.schemas.image_analysis import ImageAnalysisResult
 from app.services.image_chain import analyze_image_with_llm
 
 router = APIRouter()
 
 
-@router.post("/v1/image/analyze", response_model=ImageAnalysisResult)
+@router.post(
+    "/v1/image/analyze",
+    response_model=ImageAnalysisResult,
+    dependencies=[Depends(verify_api_key)],
+)
 async def analyze_image(
     image: UploadFile = File(...),
     user_name: str = Form("用户"),
