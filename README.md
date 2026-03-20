@@ -1,286 +1,115 @@
-# image-service
+# AI 图像分析微服务
 
-A multimodal image analysis micro-service built with **FastAPI + LangChain + Qwen (DashScope compatible API)**.
+## 项目简介
+这是一个基于 FastAPI + LangChain + 通义千问多模态模型（qwen3-vl-flash）的 AI 图像分析微服务。
 
-这个项目用于接收用户上传图片，调用多模态模型进行分析，并返回统一的结构化 JSON 结果。当前定位适合接入健康客服、Agent 工作流、Dify、企业微信后端等场景。
-
----
-
-## Current Capabilities
-
-当前已实现：
-
-- FastAPI 微服务
-- 图片分析接口：`POST /v1/image/analyze`
-- 支持图片上传（multipart/form-data）
-- 接入通义千问多模态模型：`qwen3-vl-flash`
-- 使用 LangChain 结构化输出
-- 返回统一的 Pydantic JSON Schema
-- 自动生成 `request_id`
-- 文件类型校验
-- 文件大小限制
-- 模型调用失败时返回兜底结果
+用户上传图片后，服务会返回结构化 JSON，用于健康分析（饮食、血糖、运动等场景）。
 
 ---
 
-## Tech Stack
+## 核心功能
+- 图片分析接口：POST /v1/image/analyze
+- 健康检查接口：GET /
+- API Key 鉴权（Header: X-API-Key）
+- 自动生成 request_id（全链路追踪）
+- 响应头返回 X-Request-Id
+- 结构化 JSON 输出（Pydantic Schema）
+- 图片类型与大小校验
+- 模型异常时返回兜底结果（不会直接崩溃）
+- 支持 Docker 部署
 
-- Python
+---
+
+## 技术栈
 - FastAPI
 - LangChain
-- langchain-openai
-- Qwen3-VL-Flash
-- DashScope OpenAI-compatible API
-- Pydantic / pydantic-settings
+- 通义千问（DashScope）
+- Docker
 
 ---
 
-## Project Structure
-
-```bash
-.
-├── app
-│   ├── api
-│   │   └── routes.py
-│   ├── core
-│   │   ├── config.py
-│   │   └── logging.py
-│   ├── schemas
-│   │   └── image_analysis.py
-│   ├── services
-│   │   ├── image_chain.py
-│   │   └── image_preprocess.py
-│   ├── utils
-│   │   └── file_utils.py
-│   ├── __init__.py
-│   └── main.py
-├── tests
-│   └── __init__.py
-├── .env.example
-├── API_CONTRACT.md
-├── Dockerfile
-├── PROJECT_BRIEF.md
-├── README.md
-└── requirements.txt
+## 项目结构
+```
+app/
+  api/        # 路由层
+  core/       # 配置、鉴权、日志
+  schemas/    # 数据结构定义
+  services/   # 业务逻辑（模型调用）
 ```
 
 ---
 
-## API Overview
+## 环境变量配置
 
-### 1) Health Check
+复制 `.env.example` 为 `.env` 并填写：
 
-#### GET `/`
-
-返回服务基础状态。
-
-**Response Example**
-
-```json
-{
-  "message": "image-service is running",
-  "env": "dev"
-}
-```
+- DASHSCOPE_API_KEY=你的API Key
+- QWEN_MODEL=qwen3-vl-flash
+- API_AUTH_TOKEN=dev-token
+- MAX_UPLOAD_MB=5
+- APP_ENV=dev
 
 ---
 
-### 2) Analyze Image
-
-#### POST `/v1/image/analyze`
-
-上传图片并返回结构化分析结果。
-
-### Request
-
-`Content-Type: multipart/form-data`
-
-字段：
-
-- `image`: 图片文件，必填
-- `user_name`: 用户名，可选，默认 `"用户"`
-- `scene_hint`: 场景提示，可选，默认 `"auto"`
-
-支持的图片类型：
-
-- `image/jpeg`
-- `image/png`
-- `image/webp`
-
----
-
-## cURL Example
-
-```bash
-curl -X POST "http://127.0.0.1:8000/v1/image/analyze"   -H "accept: application/json"   -F "image=@test.jpg"   -F "user_name=Runkai"   -F "scene_hint=auto"
-```
-
----
-
-## Response Schema
-
-当前结构化返回核心字段包括：
-
-- `request_id`
-- `scene_type`
-- `summary`
-- `confidence`
-- `foods`
-- `glucose_meter`
-- `phone_screen_glucose`
-- `exercise`
-- `health_assessment`
-- `friendly_reply`
-- `warnings`
-
-### Supported scene_type
-
-当前代码支持的场景类型为：
-
-- `meal_glucose`
-- `meal`
-- `exercise`
-- `poster`
-- `landscape`
-- `general`
-- `uncertain`
-
----
-
-## Response Example
-
-```json
-{
-  "request_id": "img_123456abcdef",
-  "scene_type": "meal",
-  "summary": "这是一张餐食图片，包含主食、蛋白质和蔬菜。",
-  "confidence": 0.91,
-  "foods": [
-    {
-      "name": "米饭",
-      "portion": "1小碗",
-      "confidence": 0.95
-    },
-    {
-      "name": "鸡肉",
-      "portion": "1份",
-      "confidence": 0.88
-    }
-  ],
-  "glucose_meter": null,
-  "phone_screen_glucose": null,
-  "exercise": null,
-  "health_assessment": {
-    "meal_balance": "整体搭配较均衡",
-    "protein": "有一定蛋白质来源",
-    "fiber": "蔬菜量中等",
-    "carb_risk": "主食存在一定碳水负荷",
-    "salt_risk": null,
-    "glucose_trend": null
-  },
-  "friendly_reply": "@Runkai，我已经帮你看过这张图片了，下面是结构化分析结果。",
-  "warnings": []
-}
-```
-
----
-
-## Local Development
-
-### 1. Clone repository
-
-```bash
-git clone git@github.com:Runkai703/image-service.git
-cd image-service
-git checkout feature/init-project
-```
-
-### 2. Create virtual environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-### 3. Install dependencies
+## 本地运行
 
 ```bash
 pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
 ---
 
-## Environment Variables
+## API 调用示例
 
-先复制示例文件：
-
+### 1. 健康检查
 ```bash
-cp .env.example .env
-```
-
-然后把 `.env` 改成下面这种形式：
-
-```env
-APP_NAME=image-service
-APP_ENV=dev
-APP_HOST=0.0.0.0
-APP_PORT=8000
-LOG_LEVEL=INFO
-
-DASHSCOPE_API_KEY=your_dashscope_api_key_here
-QWEN_MODEL=qwen3-vl-flash
-
-API_AUTH_TOKEN=dev-token
-MAX_UPLOAD_MB=10
+curl -i http://127.0.0.1:8000/
 ```
 
 ---
 
-## Run the Service
-
+### 2. 图片分析接口
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+curl -i -X POST "http://127.0.0.1:8000/v1/image/analyze"   -H "X-API-Key: dev-token"   -F "image=@test.jpg"   -F "user_name=用户"   -F "scene_hint=auto"
 ```
 
-启动后可访问：
+---
 
-- Service: `http://127.0.0.1:8000`
-- Swagger: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+## 返回说明
+
+### 响应头
+- X-Request-Id：请求唯一标识（用于日志追踪）
+
+### 响应体
+返回结构化 JSON，例如：
+
+```json
+{
+  "request_id": "img_xxxxx",
+  "scene_type": "meal",
+  "summary": "...",
+  "confidence": 0.95,
+  "foods": [...],
+  "health_assessment": {...},
+  "friendly_reply": "..."
+}
+```
 
 ---
 
-## Error Handling
-
-当前接口已包含这些基础校验与兜底：
-
-- 未上传文件
-- 文件内容为空
-- 不支持的图片格式
-- 图片超出大小限制
-- 模型调用失败
-- 结构化解析失败时返回保底 JSON
+## 注意事项
+- 支持图片格式：jpeg / png / webp
+- 图片大小限制由 MAX_UPLOAD_MB 控制
+- 必须携带 Header：X-API-Key
+- 模型调用失败时不会返回 500，而是返回兜底结构化结果
+- 当前仅支持单张图片分析
 
 ---
 
-## Notes
-
-当前项目里已经存在但尚未完善的内容：
-
-- `README.md`：待补充
-- `API_CONTRACT.md`：待补充
-- `Dockerfile`：待补充
-- `tests/`：测试用例待补充
-- `image_preprocess.py`：目前基本还未使用/内容为空
-
----
-
-## License
-
-MIT
+## 后续规划
+- RAG 知识库接入
+- 用户数据存储（SQL）
+- 图片自动压缩与预处理
+- 日志结构化（JSON Log）
+- 接入监控系统（ELK / Loki）
