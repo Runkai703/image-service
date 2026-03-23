@@ -45,7 +45,14 @@ class ImageAnalysisResult(BaseModel):
     ]
     summary: str
     confidence: float = Field(ge=0.0, le=1.0)
+
     foods: list[FoodItem] = []
+
+    calories: int | None = Field(
+        default=None,
+        description="当为餐饮场景时，估算整餐总热量（单位 kcal）"
+    )
+
     glucose_meter: GlucoseReading | None = None
     phone_screen_glucose: GlucoseReading | None = None
     exercise: ExerciseInfo | None = None
