@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     qwen_model: str = "qwen3-vl-flash"
 
     api_auth_token: str = "dev-token"
-    max_upload_mb: int = 10
+    max_upload_mb: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",
