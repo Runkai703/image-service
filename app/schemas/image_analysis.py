@@ -59,3 +59,11 @@ class ImageAnalysisResult(BaseModel):
     health_assessment: HealthAssessment | None = None
     friendly_reply: str
     warnings: list[str] = []
+
+class ImageAnalysisLiteResponse(BaseModel):
+    request_id: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    calories: int | None = Field(
+        default=None,
+        description="多张饮食图片综合估算的总热量（单位 kcal）"
+    )
