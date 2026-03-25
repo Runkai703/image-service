@@ -1,8 +1,12 @@
+import logging
+
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
-from app.schemas.image_analysis import ImageAnalysisResult
+from app.schemas.image_analysis import ImageAnalysisLiteResponse
 from app.utils.file_utils import image_bytes_to_data_url
+
+logger = logging.getLogger("app.image_chain")
 
 
 def analyze_image_with_llm(
@@ -11,7 +15,7 @@ def analyze_image_with_llm(
     request_id: str,
     user_name: str = "用户",
     scene_hint: str = "auto",
-) -> ImageAnalysisResult:
+) -> ImageAnalysisLiteResponse:
     try:
         data_url = image_bytes_to_data_url(
             image_bytes=image_bytes,
@@ -25,60 +29,27 @@ def analyze_image_with_llm(
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         )
 
-        structured_llm = llm.with_structured_output(ImageAnalysisResult)
+        structured_llm = llm.with_structured_output(ImageAnalysisLiteResponse)
 
         result = structured_llm.invoke(
             [
                 {
                     "role": "system",
                     "content": """
-你是一个图像分析助手，服务于健康客服系统。
+你是一个饮食图片热量估算助手。
 
-你的任务：
-
-1. 判断图片属于哪种场景：
-   - meal_glucose
-   - meal
-   - exercise
-   - poster
-   - landscape
-   - general
-   - uncertain
-
-2. 如果是餐饮/血糖图片：
-   - 识别食物
-   - 粗略判断搭配
-   - 估算整餐总热量 calories（单位 kcal，整数）
-   - 识别血糖仪读数
-   - 识别手机屏幕中的血糖值（如果存在）
-   - 给出简洁友好的分析
-
-3. 如果是运动图片：
-   - 识别运动类型，如跑步、骑行、健身房
-   - 提取可见的时长、强度、配速、消耗等信息（如果可见）
-   - 给出友好的运动建议
-
-4. 如果是普通图片：
-   - 做自然、友好的解释
-   - 不要硬套健康分析
-   - calories 必须为 null
-
-5. 如果图片信息不清楚：
-   - scene_type 设为 uncertain
-   - confidence 降低
-   - 在 warnings 里说明原因
-   - 不要编造读数
-   - calories 设为 null
+当前输入一定是饮食图片。
+请只完成以下任务：
+1. 估算这张图片中食物的总热量 calories（单位 kcal，整数）
+2. 给出整体置信度 confidence（0 到 1）
+3. 返回 request_id
 
 输出要求：
 - 必须严格按 schema 输出
+- request_id 不要遗漏
 - confidence 取值 0 到 1
-- calories：
-  - 仅在 meal / meal_glucose 场景下填写
-  - 必须为整数（单位 kcal）
-  - 根据常识估算即可，不需要特别精确
-- 如果没有对应字段，填 null 或空数组
-- 不要遗漏 request_id
+- calories 必须为整数；如果实在无法判断则填 null
+- 不要输出任何 schema 之外的内容
 """,
                 },
                 {
@@ -87,7 +58,7 @@ def analyze_image_with_llm(
                         {
                             "type": "text",
                             "text": (
-                                f"请分析这张图片并返回结构化结果。"
+                                f"请分析这张饮食图片并返回结构化结果。"
                                 f"request_id={request_id}; "
                                 f"user_name={user_name}; "
                                 f"scene_hint={scene_hint}"
@@ -105,27 +76,40 @@ def analyze_image_with_llm(
         if not result.request_id:
             result.request_id = request_id
 
-        if not result.friendly_reply:
-            result.friendly_reply = (
-                f"@{user_name}，我已经帮你看过这张图片了，下面是结构化分析结果。"
-            )
-
         return result
 
     except Exception as e:
-        return ImageAnalysisResult(
+        logger.exception(
+            "image structured output failed",
+            extra={
+                "request_id": request_id,
+                "event": "image_structured_output_failed",
+                "content_type": content_type,
+                "reason": str(e),
+            },
+        )
+
+        # ====== DRAFT: full schema fallback（完整能力保留，后续可恢复） ======
+        # return ImageAnalysisResult(
+        #     request_id=request_id,
+        #     scene_type="uncertain",
+        #     summary="图片分析暂时未成功，已返回保底结果。",
+        #     confidence=0.2,
+        #     foods=[],
+        #     glucose_meter=None,
+        #     phone_screen_glucose=None,
+        #     exercise=None,
+        #     health_assessment=None,
+        #     friendly_reply=(
+        #         f"@{user_name}，这张图片我暂时没能稳定识别出来，"
+        #         f"建议你换一张更清晰、主体更完整的图片再试一次。"
+        #     ),
+        #     warnings=[f"模型调用或结构化解析失败: {str(e)}"],
+        # )
+
+        # ====== CURRENT: lite fallback（当前阶段使用） ======
+        return ImageAnalysisLiteResponse(
             request_id=request_id,
-            scene_type="uncertain",
-            summary="图片分析暂时未成功，已返回保底结果。",
             confidence=0.2,
-            foods=[],
-            glucose_meter=None,
-            phone_screen_glucose=None,
-            exercise=None,
-            health_assessment=None,
-            friendly_reply=(
-                f"@{user_name}，这张图片我暂时没能稳定识别出来，"
-                f"建议你换一张更清晰、主体更完整的图片再试一次。"
-            ),
-            warnings=[f"模型调用或结构化解析失败: {str(e)}"],
+            calories=None,
         )

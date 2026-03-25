@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -138,9 +139,11 @@ async def analyze_image(
         },
     )
 
-    results: list[ImageAnalysisResult] = []
-
-    for image_bytes, content_type, filename in validated_images:
+    async def run_single_image_analysis(
+        image_bytes: bytes,
+        content_type: str,
+        filename: str,
+    ) -> ImageAnalysisLiteResponse:
         logger.info(
             "single image analysis started",
             extra={
@@ -154,7 +157,8 @@ async def analyze_image(
             },
         )
 
-        single_result = analyze_image_with_llm(
+        return await asyncio.to_thread(
+            analyze_image_with_llm,
             image_bytes=image_bytes,
             content_type=content_type,
             request_id=request_id,
@@ -162,23 +166,29 @@ async def analyze_image(
             scene_hint=scene_hint,
         )
 
-        results.append(single_result)
+
+    tasks = [
+        run_single_image_analysis(image_bytes, content_type, filename)
+        for image_bytes, content_type, filename in validated_images
+    ]
+
+    results = await asyncio.gather(*tasks)
 
     if len(results) == 1:
         result = results[0]
     else:
         result = aggregate_results(results)
 
-    if result.scene_type == "uncertain":
-        logger.warning(
-            "image analysis returned fallback result",
-            extra={
-                "request_id": request_id,
-                "event": "image_analysis_fallback",
-                "path": request.url.path,
-                "warnings": result.warnings,
-            },
-        )
+# ------ stage 1: fallback result (optional) ------删除部分代码
+#    if result.scene_type == "uncertain":
+#            "image analysis returned fallback result",
+#            extra={
+#                "request_id": request_id,
+#                "event": "image_analysis_fallback",
+#                "path": request.url.path,
+#                "warnings": result.warnings,
+#            },
+#        )
 
     logger.info(
         "image analysis completed",
@@ -186,7 +196,7 @@ async def analyze_image(
             "request_id": request_id,
             "event": "image_analysis_completed",
             "path": request.url.path,
-            "scene_type": result.scene_type,
+#            "scene_type": result.scene_type,
             "confidence": result.confidence,
             "has_calories": result.calories is not None,
         },
