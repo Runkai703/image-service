@@ -22,6 +22,7 @@
 当前版本只做一件事：
 
 > **根据饮食图片估算总热量（calories）**
+当前接口为 **lite 模式**，仅返回核心结果字段，不包含详细食品结构信息。
 
 返回字段：
 
@@ -70,6 +71,15 @@ POST /v1/image/analyze
 
 ---
 
+### Constraints（限制）
+
+- 支持单图或多图上传（images / image）
+- 建议图片数量：1–6 张
+- 支持格式：JPEG / PNG / WEBP
+- 单张图片大小受服务端配置限制（默认见 config）
+
+---
+
 ### Headers
 
 ```http
@@ -110,6 +120,20 @@ curl -X POST "http://127.0.0.1:8000/v1/image/analyze" \
   "calories": 1580
 }
 ```
+
+---
+
+### Error Response
+
+```json
+{
+  "detail": "不支持的图片类型"
+}
+```
+常见错误：
+* 未上传文件
+* 图片格式不支持
+* 图片大小超限
 
 ---
 
