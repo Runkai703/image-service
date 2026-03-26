@@ -46,7 +46,7 @@ class ImageAnalysisResult(BaseModel):
     summary: str
     confidence: float = Field(ge=0.0, le=1.0)
 
-    foods: list[FoodItem] = []
+    foods: list[FoodItem] = Field(default_factory=list)
 
     calories: int | None = Field(
         default=None,
@@ -58,7 +58,7 @@ class ImageAnalysisResult(BaseModel):
     exercise: ExerciseInfo | None = None
     health_assessment: HealthAssessment | None = None
     friendly_reply: str
-    warnings: list[str] = []
+    warnings: list[str] = Field(default_factory=list)
 
 class ImageAnalysisLiteResponse(BaseModel):
     request_id: str
