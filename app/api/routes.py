@@ -1,4 +1,5 @@
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
@@ -18,8 +19,10 @@ logger = logging.getLogger("app.image")
 )
 async def analyze_image(
     request: Request,
-    images: list[UploadFile] | None = File(None),
-    image: UploadFile | None = File(None),
+    images: Annotated[
+        list[UploadFile],
+        File(..., description="上传单张或多张饮食图片"),
+    ],
     user_name: str = Form("用户"),
     scene_hint: str = Form("auto"),
 ) -> ImageAnalysisLiteResponse:
@@ -31,21 +34,15 @@ async def analyze_image(
             "request_id": request_id,
             "event": "image_analyze_request_received",
             "path": request.url.path,
-            "upload_filename": [
-                *(img.filename for img in images or []),
-                *(([image.filename] if image and image.filename else [])),
-            ],
-            "content_type": [
-                *(img.content_type for img in images or []),
-                *(([image.content_type] if image and image.content_type else [])),
-            ],
+            "upload_filename": [img.filename for img in images],
+            "content_type": [img.content_type for img in images],
             "user_name": user_name,
             "scene_hint": scene_hint,
         },
     )
 
     try:
-        prepared_images = await prepare_uploaded_images(images=images, image=image)
+        prepared_images = await prepare_uploaded_images(images=images)
     except HTTPException as e:
         logger.warning(
             "image validation failed",

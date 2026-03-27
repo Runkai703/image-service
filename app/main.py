@@ -3,6 +3,7 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request
+from fastapi.openapi.utils import get_openapi
 
 from app.api.routes import router
 from app.core.config import settings
@@ -12,7 +13,47 @@ setup_logging(settings.log_level)
 
 logger = logging.getLogger("app.request")
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+)
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+        description=app.description,
+    )
+
+    # 强制把 images 修正为 Swagger 能正确识别的多文件上传格式
+    body_schema = (
+        openapi_schema
+        .get("components", {})
+        .get("schemas", {})
+        .get("Body_analyze_image_v1_image_analyze_post")
+    )
+
+    if body_schema and "properties" in body_schema and "images" in body_schema["properties"]:
+        body_schema["properties"]["images"] = {
+            "type": "array",
+            "title": "Images",
+            "description": "上传单张或多张饮食图片",
+            "items": {
+                "type": "string",
+                "format": "binary",
+            },
+        }
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 @app.middleware("http")
